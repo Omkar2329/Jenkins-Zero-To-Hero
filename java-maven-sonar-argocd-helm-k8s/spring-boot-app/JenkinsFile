@@ -1,67 +1,63 @@
 pipeline {
-  agent {
-    docker {
-      image 'abhishekf5/maven-abhishek-docker-agent:v1'
-      args '--user root -v /var/run/docker.sock:/var/run/docker.sock' // mount Docker socket to access the host's Docker daemon
+    agent {
+        docker {
+            image 'abhishekf5/maven-abhishek-docker-agent:v1'
+            args '--user root -v /var/run/docker.sock:/var/run/docker.sock' // mount Docker socket to access the host's Docker daemon
+        }
     }
-  }
-  stages {
-    stage('Checkout') {
-      steps {
-        sh 'echo passed'
-        // Uncomment and use the following line to checkout the repository if needed
-        // git branch: 'main', url: 'https://github.com/Omkar2329/Jenkins-ZeroToHero'
-      }
-    }
-    
-    stage('Build and Test') {
-      steps {
-        sh 'ls -ltr'
-        // Build the project and create a JAR file
-        sh 'cd java-maven-sonar-argocd-helm-k8s/spring-boot-app && mvn clean package'
-      }
-    }
-    
-    stage('Build and Push Docker Image') {
-      environment {
-        DOCKER_IMAGE = "my-artifactory-repo/ultimate-cicd:${BUILD_NUMBER}" // Set your Artifactory repo and tag
-        REGISTRY_CREDENTIALS = credentials('jfrog-cred') // Replace with your Jenkins Artifactory credentials ID
-        ARTIFACTORY_URL = "http://34.56.162.105:8082/" // Replace with your JFrog Artifactory URL
-      }
-      steps {
-        script {
-          // Build the Docker image
-          sh 'cd java-maven-sonar-argocd-helm-k8s/spring-boot-app && docker build -t ${DOCKER_IMAGE} .'
+    stages {
+        stage('Checkout') {
+            steps {
+                sh 'echo passed'
+                // git branch: 'main', url: 'https://github.com/Omkar2329/Jenkins-Zero-To-Hero'
+            }
+        }
+        stage('Build and Test') {
+            steps {
+                sh 'ls -ltr'
+                // build the project and create a JAR file
+                sh 'cd java-maven-sonar-argocd-helm-k8s/spring-boot-app && mvn clean package'
+            }
+        }
+        stage('Build and Push Docker Image') {
+            environment {
+                DOCKER_IMAGE = "my-artifactory-repo/ultimate-cicd:${BUILD_NUMBER}" // Set your Artifactory repo and tag
+                ARTIFACTORY_URL = "https://34.56.162.105:8082/" // Replace with your JFrog Artifactory URL
+                ARTIFACTORY_USER = 'admin'  // Artifactory username
+                ARTIFACTORY_PASSWORD = 'Jfrog@123' // Artifactory password or API key
+            }
+            steps {
+                script {
+                    // Build the Docker image
+                    sh 'cd java-maven-sonar-argocd-helm-k8s/spring-boot-app && docker build -t ${DOCKER_IMAGE} .'
 
-          // Authenticate to JFrog Artifactory and push the image
-          docker.withRegistry("${ARTIFACTORY_URL}", "jfrog-cred") {
-            def dockerImage = docker.image("${DOCKER_IMAGE}")
-            // Push the image to Artifactory
-            dockerImage.push()
-          }
+                    // Authenticate to JFrog Artifactory and push the image
+                    docker.withRegistry("${ARTIFACTORY_URL}", "${ARTIFACTORY_USER}:${ARTIFACTORY_PASSWORD}") {
+                        def dockerImage = docker.image("${DOCKER_IMAGE}")
+                        // Push the image to Artifactory
+                        dockerImage.push()
+                    }
+                }
+            }
         }
-      }
-    }
-    
-    stage('Update Deployment File') {
-      environment {
-        GIT_REPO_NAME = "Jenkins-Zero-To-Hero"
-        GIT_USER_NAME = "Omkar2329"
-      }
-      steps {
-        withCredentials([string(credentialsId: 'github', variable: 'GITHUB_TOKEN')]) {
-          sh '''
-            git config user.email "omkarpalshetkar11.op@gmail.com"
-            git config user.name "Omkar Palshetkar"
-            BUILD_NUMBER=${BUILD_NUMBER}
-            # Replace the placeholder in the deployment file with the build number
-            sed -i "s/replaceImageTag/${BUILD_NUMBER}/g" java-maven-sonar-argocd-helm-k8s/spring-boot-app-manifests/deployment.yml
-            git add java-maven-sonar-argocd-helm-k8s/spring-boot-app-manifests/deployment.yml
-            git commit -m "Update deployment image to version ${BUILD_NUMBER}"
-            git push https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME} HEAD:main
-          '''
+        stage('Update Deployment File') {
+            environment {
+                GIT_REPO_NAME = "Jenkins-Zero-To-Hero"
+                GIT_USER_NAME = "Omkar2329"
+            }
+            steps {
+                withCredentials([string(credentialsId: 'github', variable: 'GITHUB_TOKEN')]) {
+                    sh '''
+                        git config user.email "omkarpalshetkar11.op@gmail.com"
+                        git config user.name "Omkar Palshetkar"
+                        BUILD_NUMBER=${BUILD_NUMBER}
+                        sed -i "s/replaceImageTag/${BUILD_NUMBER}/g" java-maven-sonar-argocd-helm-k8s/spring-boot-app-manifests/deployment.yml
+                        git add java-maven-sonar-argocd-helm-k8s/spring-boot-app-manifests/deployment.yml
+                        git commit -m "Update deployment image to version ${BUILD_NUMBER}"
+                        git push https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME} HEAD:main
+                    '''
+                }
+            }
         }
-      }
     }
-  }
 }
